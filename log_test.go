@@ -31,3 +31,27 @@ func (t *testLogSuite) TestExport(c *C) {
 	Error("Testing")
 	lg.AssertContains("log_test.go:")
 }
+
+//func (t *testLogSuite) TestLogPrint(c *C) {
+//	config := &Config{
+//		Level:               "info",
+//		Format:              "text",
+//		DisableTimestamp:    false,
+//		File:                FileLogConfig{},
+//		Development:         false,
+//		DisableCaller:       false,
+//		DisableStacktrace:   true,
+//		DisableErrorVerbose: false,
+//		Sampling:            nil,
+//	}
+//	gl, props, err := InitLogger(config)
+//	if err != nil {
+//		c.Error(err)
+//	}
+//	gl = gl.With(zap.Int32("conn", 123))
+//	ReplaceGlobals(gl, props)
+//	Info("Info Testing")
+//	Debug("Debug Testing")
+//	Warn("Warn Testing")
+//	Error("Error Testing")
+//}

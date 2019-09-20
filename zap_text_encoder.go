@@ -238,6 +238,11 @@ func (enc *textEncoder) AddString(key, val string) {
 	enc.AppendString(val)
 }
 
+func (enc *textEncoder) AddOriginalString(key, val string) {
+	enc.addKey(key)
+	enc.buf.AppendString(val)
+}
+
 func (enc *textEncoder) AddTime(key string, val time.Time) {
 	enc.addKey(key)
 	enc.AppendTime(val)
@@ -329,6 +334,16 @@ func (enc *textEncoder) AppendString(val string) {
 	enc.safeAddStringWithQuote(val)
 }
 
+
+func (enc *textEncoder) AppendOriginalString(val string) {
+	enc.buf.AppendString(val)
+}
+
+func (enc *textEncoder) AppendStringWithoutQuote(val string) {
+	enc.addElementSeparator()
+	enc.safeAddString(val)
+}
+
 func (enc *textEncoder) AppendTime(val time.Time) {
 	cur := enc.buf.Len()
 	enc.EncodeTime(val, enc)
@@ -346,8 +361,21 @@ func (enc *textEncoder) beginQuoteFiled() {
 	enc.buf.AppendByte('[')
 }
 
+func (enc *textEncoder) beginWithoutQuoteFiled() {
+	if enc.buf.Len() > 0 {
+		enc.buf.AppendByte(' ')
+	}
+}
+
 func (enc *textEncoder) endQuoteFiled() {
 	enc.buf.AppendByte(']')
+}
+
+func (enc *textEncoder) quoteEndFiledBegin() {
+	if enc.buf.Len() > 0 {
+		enc.buf.AppendByte(' ')
+	}
+	enc.buf.AppendString("-->")
 }
 
 func (enc *textEncoder) AppendUint64(val uint64) {
@@ -395,6 +423,17 @@ func (enc *textEncoder) cloned() *textEncoder {
 	return clone
 }
 
+func endLevelQuoteAdditional(l zapcore.Level) string {
+	switch l {
+	case zapcore.InfoLevel:
+		return " "
+	case zapcore.WarnLevel:
+		return " "
+	default:
+		return ""
+	}
+}
+
 func (enc *textEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
 	final := enc.cloned()
 	if final.TimeKey != "" {
@@ -413,6 +452,7 @@ func (enc *textEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (
 			final.AppendString(ent.Level.String())
 		}
 		final.endQuoteFiled()
+		final.AppendOriginalString(endLevelQuoteAdditional(ent.Level))
 	}
 
 	if ent.LoggerName != "" && final.NameKey != "" {
@@ -445,22 +485,31 @@ func (enc *textEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (
 		}
 		final.endQuoteFiled()
 	}
-	// add Message
-	if len(ent.Message) > 0 {
-		final.beginQuoteFiled()
-		final.AppendString(ent.Message)
-		final.endQuoteFiled()
-	}
+
+	// add with
 	if enc.buf.Len() > 0 {
 		final.buf.AppendByte(' ')
 		final.buf.Write(enc.buf.Bytes())
 	}
-	final.addFields(fields)
+
+	// add Message
+	if len(ent.Message) > 0 {
+	//	final.beginQuoteFiled()
+	//	final.AppendString(ent.Message)
+	//	final.endQuoteFiled()
+		final.beginWithoutQuoteFiled()
+		final.AppendStringWithoutQuote(ent.Message)
+	}
+
+	final.addFields(fields, true)
 	final.closeOpenNamespaces()
 	if ent.Stack != "" && final.StacktraceKey != "" {
-		final.beginQuoteFiled()
-		final.AddString(final.StacktraceKey, ent.Stack)
-		final.endQuoteFiled()
+		//final.beginQuoteFiled()
+		//final.AddString(final.StacktraceKey, ent.Stack)
+		//final.endQuoteFiled()
+
+		final.AppendOriginalString(final.LineEnding)
+		final.AddOriginalString(final.StacktraceKey, ent.Stack)
 	}
 
 	if final.LineEnding != "" {
@@ -620,7 +669,11 @@ func (enc *textEncoder) tryAddRuneError(r rune, size int) bool {
 	return false
 }
 
-func (enc *textEncoder) addFields(fields []zapcore.Field) {
+// log.with after == false
+func (enc *textEncoder) addFields(fields []zapcore.Field, after bool) {
+	if after && len(fields) > 0 {
+		enc.quoteEndFiledBegin()
+	}
 	for _, f := range fields {
 		if f.Type == zapcore.ErrorType {
 			// handle ErrorType in pingcap/log to fix "[key=?,keyVerbose=?]" problem.
